@@ -37,5 +37,6 @@ std = [
 assert_matches = "1.5.0"
 tracing-test = { version = "0.2.1", git = "https://github.com/nathanwhit/tracing-test", branch = "main" }
 pallet-balances = { workspace = true, features = ["std"] }
+parking_lot = "0.11.0"
 sp-keystore = { workspace = true, features = ["std"] }
 runtime-utils = { workspace = true }

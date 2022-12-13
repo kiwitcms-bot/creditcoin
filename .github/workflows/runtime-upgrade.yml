@@ -1,0 +1,33 @@
+name: Runtime Upgrade
+
+on:
+  pull_request:
+    branches: [main, testnet]
+
+jobs:
+  migrations-duration:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Creditcoin blocks data
+        run: |
+            curl --silent https://creditcoinblockchain.blob.core.windows.net/latestblocks/creditcoin-2.0-testnet-exported-blocks-12-13-22.binary.gz > blocks.binary.gz
+            gunzip ./blocks.binary.gz
+
+      - name: Download creditcoin-node binary
+        uses: i3h/download-release-asset@v1
+        with:
+          owner: gluwa
+          repo: creditcoin
+          tag: latest
+          file: /creditcoin-.*-x86_64-.*-linux-.*\.zip/
+
+      - name: Extract creditcoin-node binary
+        run: |
+            unzip creditcoin-*-x86_64-*-linux-*.zip
+            chmod a+x creditcoin-node
+
+      - name: Import blocks
+        run: |
+            ./creditcoin-node import-blocks --chain test --base-path /tmp/creditcoin-data --binary ./blocks.binary

@@ -93,7 +93,7 @@ mod tests {
 	#[test]
 	fn sane_to_float() {
 		use rand::Rng;
-		use sp_runtime::Perbill;
+		use sp_arithmetic::Perbill;
 		let mut rng = rand::thread_rng();
 		for _ in 0..1000 {
 			let r: f64 = rng.gen();

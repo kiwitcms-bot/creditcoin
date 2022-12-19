@@ -36,13 +36,16 @@ pub(crate) fn post_upgrade<T: Config>() -> Result<(), &'static str> {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
 	use super::*;
 	use crate::helpers::extensions::IntoBounded;
 	use crate::mock::ExtBuilder;
 	use crate::mock::Test;
+	use crate::ocw::tests::make_unverified_transfer;
+	use crate::tests::TestInfo;
 	use crate::types;
 	use crate::CollectedCoinsId;
+	use crate::{TransferId, TransferKind};
 
 	#[test]
 	fn migrate_pending_tasks() {
@@ -52,19 +55,42 @@ pub mod tests {
 				tx_id: [0u8; 256].into_bounded(),
 				contract: Default::default(),
 			};
-			let id = TaskV2::<Test>::to_id(&pending);
+			let pending_id = TaskV2::<Test>::to_id(&pending);
 
 			crate::PendingTasks::<Test>::insert(
 				1u64,
-				crate::TaskId::from(CollectedCoinsId::from(id)),
+				crate::TaskId::from(CollectedCoinsId::from(pending_id)),
 				Task::from(pending.clone()),
+			);
+
+			let test_info = TestInfo::new_defaults();
+			let (deal_order_id, deal_order) = test_info.create_deal_order();
+			let (_, transfer) = test_info.make_transfer(
+				&test_info.lender,
+				&test_info.borrower,
+				deal_order.terms.amount,
+				&deal_order_id,
+				"0xfafafa",
+				None::<TransferKind>,
+			);
+
+			let unverified = make_unverified_transfer(transfer);
+			let unverified_id = TaskV2::<Test>::to_id(&unverified);
+
+			crate::PendingTasks::<Test>::insert(
+				2u64,
+				crate::TaskId::from(TransferId::new::<Test>(
+					&unverified.transfer.blockchain,
+					&unverified.transfer.tx_id,
+				)),
+				Task::from(unverified),
 			);
 
 			migrate::<Test>();
 
 			let migrated_pending = {
 				if let Task::CollectCoins(pending) =
-					pallet_offchain_task_scheduler::pallet::PendingTasks::<Test>::get(1, id)
+					pallet_offchain_task_scheduler::pallet::PendingTasks::<Test>::get(1, pending_id)
 						.unwrap()
 				{
 					pending
@@ -73,6 +99,18 @@ pub mod tests {
 				}
 			};
 			assert_eq!(pending, migrated_pending);
+
+			let migrated_unverified = {
+				if let Task::VerifyTransfer(unverified) =
+					pallet_offchain_task_scheduler::pallet::PendingTasks::<Test>::get(2, unverified_id)
+						.unwrap()
+				{
+					pending
+				} else {
+					unreachable!()
+				}
+			};
+			assert_eq!(unverified, migrated_unverified);
 		});
 	}
 }

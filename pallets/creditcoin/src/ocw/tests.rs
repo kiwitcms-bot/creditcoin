@@ -383,7 +383,7 @@ type MockUnverifiedTransfer = crate::UnverifiedTransfer<
 	u64,
 >;
 
-fn make_unverified_transfer(transfer: MockTransfer) -> MockUnverifiedTransfer {
+pub(crate) fn make_unverified_transfer(transfer: MockTransfer) -> MockUnverifiedTransfer {
 	MockUnverifiedTransfer {
 		transfer,
 		to_external: ExternalAddress::try_from(ETHLESS_TO_ADDR.0.to_vec()).unwrap(),

@@ -51,4 +51,4 @@ fn eth_get_transaction(tx_id: &ExternalTxId, rpc_url: &str) -> OffchainResult<rp
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

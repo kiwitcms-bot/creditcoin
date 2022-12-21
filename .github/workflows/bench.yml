@@ -98,7 +98,7 @@ jobs:
 
       - name: Check if runner machine meets chain's requirements
         run: |
-          ./target/release/creditcoin-node benchmark machine --chain main
+          ./scripts/check-hardware.sh
 
       - name: Difficulty
         shell: bash

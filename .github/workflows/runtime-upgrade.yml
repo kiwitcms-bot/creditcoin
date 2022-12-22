@@ -35,52 +35,13 @@ jobs:
           command: build
           args: --release --features try-runtime
 
-      - name: Download Creditcoin blocks data
+      - name: Download try-runtime snapshots data for Creditcoin
         run: |
-            curl --silent https://creditcoinblockchain.blob.core.windows.net/latestblocks/creditcoin-2.0-mainnet-exported-blocks-12-13-22.binary.gz > blocks.binary.gz
-            gunzip ./blocks.binary.gz
+            curl --silent https://creditcoinblockchain.blob.core.windows.net/latestblocks/creditcoin-2.0-mainnet-try-runtime-snapshot-12-19-22.tar.gz > snapshot.tar.gz
 
-      - name: Import blocks
-        run: |
-            ./target/release/creditcoin-node import-blocks --chain main --base-path /tmp/creditcoin-data --binary ./blocks.binary
-
-      - name: Start creditcoin-node
-        run: |
-            MINING_KEY=$(docker run docker.io/parity/subkey:latest generate | grep "SS58 Address" | tr -d ' ' | cut -f2 -d':')
-
-            if [ -z "$MINING_KEY" ]; then
-                echo "ERROR: Problem generating mining key"
-                exit 1
-            fi
-
-            echo "INFO: MINING_KEY=$MINING_KEY"
-            ./target/release/creditcoin-node --mining-key $MINING_KEY --chain mainnet --monitor-nonce auto \
-                --base-path /tmp/creditcoin-data --name testing-runtime-upgrade \
-                --bootnodes "/dns4/bootnode.creditcoin.network/tcp/30333/p2p/12D3KooWAEgDL126EUFxFfdQKiUhmx3BJPdszQHu9PsYsLCuavhb" \
-                            "/dns4/bootnode2.creditcoin.network/tcp/30333/p2p/12D3KooWSQye3uN3bZQRRC4oZbpiAZXkP2o5UZh6S8pqyh24bF3k" \
-                            "/dns4/bootnode3.creditcoin.network/tcp/30333/p2p/12D3KooWFrsEZ2aSfiigAxs6ir2kU6en4BewotyCXPhrJ7T1AzjN" \
-                            --port 30333  --telemetry-url "wss://telemetry.polkadot.io/submit/ 0" >~/creditcoin-node.log 2>&1 &
-            ./integration-tests/wait-for-creditcoin.sh
+            mkdir /var/tmp/blockchain-snapshot
+            tar -xzvf ./snapshot.tar.gz -C /var/tmp/blockchain-snapshot
 
       - name: Try-runtime migrations
         run: |
-            RPC_URL="http://127.0.0.1:9933"
-            BLOCK_HASH=$(curl -s -H 'Content-Type: application/json' -d '{"id":"1", "jsonrpc":"2.0", "method": "chain_getBlockHash", "params":[]}' $RPC_URL | jq '.result' | tr -d '"')
-
-            WS_URL="ws://127.0.0.1:9944"
-            ./target/release/creditcoin-node try-runtime --dev --no-spec-check-panic on-runtime-upgrade live --uri $WS_URL --at $BLOCK_HASH
-
-
-      - name: Kill creditcoin-node
-        run: |
-          # if all went well kill the node. Otherwise GitHub Actions would exit on the
-          # previous step killing everything and we don't have to worry about
-          # dangling processes
-          killall -9 creditcoin-node
-
-      - name: Upload logs
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: logs
-          path: ~/creditcoin-node.log
+            ./target/release/creditcoin-node try-runtime --dev --no-spec-check-panic on-runtime-upgrade snap --snapshot-path /var/tmp/blockchain-snapshot

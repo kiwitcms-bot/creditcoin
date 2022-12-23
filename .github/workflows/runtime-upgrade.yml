@@ -44,4 +44,5 @@ jobs:
 
       - name: Try-runtime migrations
         run: |
-            ./target/release/creditcoin-node try-runtime --dev --no-spec-check-panic on-runtime-upgrade snap --snapshot-path /var/tmp/blockchain-snapshot
+            ./target/release/creditcoin-node try-runtime --dev --no-spec-check-panic on-runtime-upgrade \
+                snap --snapshot-path /var/tmp/blockchain-snapshot/creditcoin-2.0-mainnet-try-runtime-snapshot-12-19-22.

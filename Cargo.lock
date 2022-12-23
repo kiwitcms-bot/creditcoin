@@ -4289,11 +4289,11 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-consensus-pow",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "sp-std",
- "sp-tracing",
+ "sp-core 6.0.0",
+ "sp-io 6.0.0",
+ "sp-runtime 6.0.0",
+ "sp-std 4.0.0",
+ "sp-tracing 5.0.0",
 ]
 
 [[package]]

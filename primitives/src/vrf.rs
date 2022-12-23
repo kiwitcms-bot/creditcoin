@@ -6,41 +6,39 @@ use sp_consensus_vrf::schnorrkel::SignatureError;
 use sp_runtime_interface::pass_by::PassByCodec;
 use sp_runtime_interface::runtime_interface;
 
-#[derive(Encode, Decode, PassByCodec)]
-pub struct Wrap(Perquintill);
-
-impl From<Wrap> for f64 {
-	fn from(w: Wrap) -> Self {
-		w.0.to_sub_1_float()
-	}
-}
-
-impl From<Perquintill> for Wrap {
-	fn from(p: Perquintill) -> Self {
-		Wrap(p)
-	}
-}
-
-#[runtime_interface]
-trait Pdf {
-	fn probability_density_function(sample: Wrap, weight: Wrap) -> Wrap {
-		let complement = 1f64 - sample.0.to_sub_1_float();
-		let r: f64 = weight.into();
-		let f: f64 = complement.powf(r);
-		Perquintill::from_float(1f64 - f).into()
-	}
-}
-
 pub mod sortition {
 	use super::*;
-	use schnorrkel::vrf::VRFInOut;
-	use sp_consensus_vrf::schnorrkel::PublicKey;
 	/// S is a hyperparameter representing participation rate.
 	/// The higher the value, the higher the chances of being sampled.
 	/// R is the prover's relative stake. the output is proportional to the stake.
 	pub fn model(s: Perquintill, r: Perquintill) -> f64 {
 		use pdf::probability_density_function;
 		probability_density_function(s.into(), r.into()).into()
+	}
+
+	#[derive(Encode, Decode, PassByCodec)]
+	pub struct Wrap(Perquintill);
+
+	impl From<Wrap> for f64 {
+		fn from(w: Wrap) -> Self {
+			w.0.to_sub_1_float()
+		}
+	}
+
+	impl From<Perquintill> for Wrap {
+		fn from(p: Perquintill) -> Self {
+			Wrap(p)
+		}
+	}
+
+	#[runtime_interface]
+	trait Pdf {
+		fn probability_density_function(sample: Wrap, weight: Wrap) -> Wrap {
+			let complement = 1f64 - sample.0.to_sub_1_float();
+			let r: f64 = weight.into();
+			let f: f64 = complement.powf(r);
+			Perquintill::from_float(1f64 - f).into()
+		}
 	}
 
 	pub fn threshold(sample_size: Perquintill, stake: u128, total_stake: u128) -> u128 {
@@ -55,22 +53,41 @@ pub mod sortition {
 		u128::from_le_bytes(inout.make_bytes::<[u8; 16]>(b"creditcoin-vrf")) < threshold
 	}
 
-	pub fn prove_vrf(
-		pubkey: PublicKey,
-		pre_hash: H256,
-		epoch: u64,
-		task_id: H256,
-		output: VRFOutput,
-		proof: VRFProof,
-	) -> Result<VRFInOut, SignatureError> {
-		let transcript = make_transcript(transcript_data(pre_hash, epoch, task_id));
-		pubkey
-			.vrf_verify(transcript, &output, &proof)
-			.map(|(inout, _proofbatchable)| inout)
-	}
-
 	#[cfg(test)]
-	mod tests {}
+	mod tests {
+		use super::*;
+
+		#[test]
+		fn distribution_works() {
+			let r = Perquintill::from_float(0.000_001);
+			let c = Perquintill::from_float(0.5);
+
+			assert!(sortition::model(c, r) - 6.931469403334938544156E-7 < f64::EPSILON);
+		}
+
+		#[test]
+		fn threshold_works() {
+			let x = sortition::threshold(Perquintill::from_float(0.5), 1, 1);
+			let y = u128::MAX / 2;
+			assert_eq!(x, y)
+		}
+
+		#[test]
+		fn sane_to_float() {
+			use rand::Rng;
+			use sp_arithmetic::Perbill;
+			let mut rng = rand::thread_rng();
+			for _ in 0..1000 {
+				let r: f64 = rng.gen();
+
+				let x = Perquintill::from_float(r).to_sub_1_float();
+				assert!(r - x < f64::EPSILON, "{r} - {x} < ε");
+
+				let x = Perbill::from_float(r).to_sub_1_float();
+				assert!(r - x < f32::EPSILON.into(), "{r} - {x} < ε");
+			}
+		}
+	}
 }
 
 // Convert fixed point to f64, Accuracy depends on [PerThing::Inner]
@@ -104,6 +121,8 @@ pub(super) fn transcript_data(pre_hash: H256, epoch: u64, task_id: H256) -> VRFT
 	}
 }
 
+use schnorrkel::vrf::VRFInOut;
+use sp_consensus_vrf::schnorrkel::PublicKey;
 use sp_consensus_vrf::schnorrkel::{VRFOutput, VRFProof};
 use sp_core::crypto::KeyTypeId;
 use sp_core::sr25519::Public;
@@ -113,6 +132,20 @@ use sp_keystore::vrf::VRFSignature;
 #[cfg(feature = "std")]
 use sp_keystore::{KeystoreExt, SyncCryptoStore};
 use tracing as log;
+
+pub fn prove_vrf(
+	pubkey: PublicKey,
+	pre_hash: H256,
+	epoch: u64,
+	task_id: H256,
+	output: VRFOutput,
+	proof: VRFProof,
+) -> Result<VRFInOut, SignatureError> {
+	let transcript = make_transcript(transcript_data(pre_hash, epoch, task_id));
+	pubkey
+		.vrf_verify(transcript, &output, &proof)
+		.map(|(inout, _proofbatchable)| inout)
+}
 
 #[runtime_interface]
 pub trait Vrf {
@@ -152,37 +185,6 @@ mod tests {
 	use runtime_utils::ExtBuilder;
 	use sp_consensus_vrf::schnorrkel::PublicKey;
 	use sp_core::blake2_256;
-
-	#[test]
-	fn distribution_works() {
-		let r = Perquintill::from_float(0.000_001);
-		let c = Perquintill::from_float(0.5);
-
-		assert!(sortition::model(c, r) - 6.931469403334938544156E-7 < f64::EPSILON);
-	}
-
-	#[test]
-	fn threshold_works() {
-		let x = sortition::threshold(Perquintill::from_float(0.5), 1, 1);
-		let y = u128::MAX / 2;
-		assert_eq!(x, y)
-	}
-
-	#[test]
-	fn sane_to_float() {
-		use rand::Rng;
-		use sp_arithmetic::Perbill;
-		let mut rng = rand::thread_rng();
-		for _ in 0..1000 {
-			let r: f64 = rng.gen();
-
-			let x = Perquintill::from_float(r).to_sub_1_float();
-			assert!(r - x < f64::EPSILON, "{r} - {x} < ε");
-
-			let x = Perbill::from_float(r).to_sub_1_float();
-			assert!(r - x < f32::EPSILON.into(), "{r} - {x} < ε");
-		}
-	}
 
 	struct PublicData {
 		key_type_id: KeyTypeId,
@@ -232,7 +234,7 @@ mod tests {
 			let (output, proof) =
 				generate_vrf(key_type_id, &pubkey, pre_hash, epoch, task_id).unwrap();
 
-			sortition::prove_vrf(
+			prove_vrf(
 				PublicKey::from_bytes(&pubkey.0).unwrap(),
 				pre_hash,
 				epoch,

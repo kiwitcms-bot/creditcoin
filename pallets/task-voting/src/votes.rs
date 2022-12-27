@@ -36,23 +36,23 @@ pub struct Data<AccountId, Max> {
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo)]
-pub struct Summary<DataId> {
+pub struct Summary<OutputId> {
 	vote_total: Power,
 	winning_vote_total: Power,
-	winning_data: DataId,
+	winning_data: OutputId,
 	runner_up_total: Power,
 }
 
-impl<AccountId, DataId: Ord, MaxVoters> Votes<AccountId, DataId, MaxVoters> {
+impl<AccountId, OutputId: Ord, MaxVoters> Votes<AccountId, OutputId, MaxVoters> {
 	pub fn iter(
 		&self,
-	) -> sp_std::collections::btree_map::Iter<'_, DataId, Data<AccountId, MaxVoters>> {
+	) -> sp_std::collections::btree_map::Iter<'_, OutputId, Data<AccountId, MaxVoters>> {
 		self.votes.iter()
 	}
 }
 
-impl<AccountId, DataId: Ord + Clone, MaxVoters> Votes<AccountId, DataId, MaxVoters> {
-	pub fn tally_votes<T: Config>(&self) -> Result<Summary<DataId>, Error<T>> {
+impl<AccountId, OutputId: Ord + Clone, MaxVoters> Votes<AccountId, OutputId, MaxVoters> {
+	pub fn tally_votes<T: Config>(&self) -> Result<Summary<OutputId>, Error<T>> {
 		let mut best_data = None;
 		let mut best_power = 0;
 

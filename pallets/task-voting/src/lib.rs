@@ -17,8 +17,11 @@ use votes::{Data as VotingData, Power as VotingPower, Summary as VoteResultSumma
 #[allow(clippy::unnecessary_cast)]
 pub mod weights;
 
-pub type RoundOf<T> =
-	Votes<<T as frame_system::Config>::AccountId, <T as Config>::DataId, <T as Config>::MaxVoters>;
+pub type RoundOf<T> = Votes<
+	<T as frame_system::Config>::AccountId,
+	<T as Config>::OutputId,
+	<T as Config>::MaxVoters,
+>;
 
 pub trait QuorumMet<T: Config> {
 	fn meets_quorum(task: &T::TaskId, votes: &RoundOf<T>) -> bool;
@@ -27,7 +30,7 @@ pub trait QuorumMet<T: Config> {
 pub trait OnVoteConclusion<T: Config> {
 	fn voting_concluded(
 		task: &T::TaskId,
-		summary: VoteResultSummary<T::DataId>,
+		summary: VoteResultSummary<T::OutputId>,
 		votes: &RoundOf<T>,
 	);
 }
@@ -78,7 +81,7 @@ pub mod pallet {
 
 		type TaskId: Parameter + Ord + MaxEncodedLen;
 
-		type DataId: Parameter + Ord + MaxEncodedLen;
+		type OutputId: Parameter + Ord + MaxEncodedLen;
 
 		type OnVoteConclusion: OnVoteConclusion<Self>;
 
@@ -119,22 +122,25 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		pub fn submit_vote(
 			task_id: T::TaskId,
-			data: T::DataId,
+			data: T::OutputId,
 			voter: T::AccountId,
 		) -> Result<(), Error<T>> {
-			let mut votes = Rounds::<T>::get(&task_id).ok_or(Error::UnknownTask)?;
+			//main round structure
+			let mut round = Rounds::<T>::get(&task_id).ok_or(Error::UnknownTask)?;
 
+			// stake api
 			let power = T::VotingProvider::voting_power_of(&task_id, &voter)?;
 
-			if let Some(vote) = votes.votes.get_mut(&data) {
+			// get output hash
+			if let Some(vote) = round.votes.get_mut(&data) {
 				vote.add_voter(voter, power)?;
 			} else {
 				let mut vote = VotingData::new();
 				vote.add_voter(voter, power)?;
-				votes.votes.try_insert(data, vote).map_err(|_| Error::TooManyVoters)?;
+				round.votes.try_insert(data, vote).map_err(|_| Error::TooManyVoters)?;
 			}
 
-			Rounds::<T>::insert(task_id, votes);
+			Rounds::<T>::insert(task_id, round);
 			Ok(())
 		}
 
@@ -152,7 +158,7 @@ pub mod pallet {
 
 		pub fn start_task_voting(
 			task_id: T::TaskId,
-			initial_vote: Option<(T::AccountId, T::DataId)>,
+			initial_vote: Option<(T::AccountId, T::OutputId)>,
 		) -> Result<(), Error<T>> {
 			ensure!(!Rounds::<T>::contains_key(&task_id), Error::VoteInProgress);
 			let mut votes = BoundedBTreeMap::new();

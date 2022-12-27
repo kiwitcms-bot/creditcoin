@@ -60,7 +60,7 @@ impl crate::Config for Test {
 
 	type TaskId = u64;
 
-	type DataId = u64;
+	type OutputId = u64;
 
 	type OnVoteConclusion = ();
 

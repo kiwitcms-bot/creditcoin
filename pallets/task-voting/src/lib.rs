@@ -121,26 +121,26 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		pub fn submit_vote(
-			task_id: T::TaskId,
-			data: T::OutputId,
+			task: T::TaskId,
+			output: T::OutputId,
 			voter: T::AccountId,
 		) -> Result<(), Error<T>> {
 			//main round structure
-			let mut round = Rounds::<T>::get(&task_id).ok_or(Error::UnknownTask)?;
+			let mut round = Rounds::<T>::get(&task).ok_or(Error::UnknownTask)?;
 
 			// stake api
-			let power = T::VotingProvider::voting_power_of(&task_id, &voter)?;
+			let power = T::VotingProvider::voting_power_of(&task, &voter)?;
 
 			// get output hash
-			if let Some(vote) = round.votes.get_mut(&data) {
+			if let Some(vote) = round.votes.get_mut(&output) {
 				vote.add_voter(voter, power)?;
 			} else {
 				let mut vote = VotingData::new();
 				vote.add_voter(voter, power)?;
-				round.votes.try_insert(data, vote).map_err(|_| Error::TooManyVoters)?;
+				round.votes.try_insert(output, vote).map_err(|_| Error::TooManyVoters)?;
 			}
 
-			Rounds::<T>::insert(task_id, round);
+			Rounds::<T>::insert(task, round);
 			Ok(())
 		}
 

@@ -14,6 +14,8 @@ mod voting;
 use voting::traits::{OnVoteConclusion, QuorumMet, VoterPower};
 use voting::{Power as VotingPower, Votes};
 
+mod sampling;
+
 #[allow(clippy::unnecessary_cast)]
 pub mod weights;
 

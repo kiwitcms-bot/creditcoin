@@ -1,10 +1,10 @@
-//use crate::mock::*;
-use crate::{Config, OnVoteConclusion, RoundOf, VoteResultSummary};
+use crate::voting::Summary;
+use crate::{Config, OnVoteConclusion, RoundOf};
 
 impl<T: Config> OnVoteConclusion<T> for () {
 	fn voting_concluded(
 		_task: &<T as Config>::TaskId,
-		_summary: VoteResultSummary<T::OutputId>,
+		_summary: Summary<T::OutputId>,
 		_votes: &RoundOf<T>,
 	) {
 	}

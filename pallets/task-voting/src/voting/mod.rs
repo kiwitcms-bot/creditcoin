@@ -1,7 +1,10 @@
-use super::{Config, Error};
-use frame_support::{traits::Get, BoundedBTreeMap, BoundedBTreeSet};
+use super::{pallet::Rounds, Config, Error, Pallet};
+use frame_support::{ensure, traits::Get, BoundedBTreeMap, BoundedBTreeSet};
 use scale_info::TypeInfo;
 use sp_runtime::codec::{Decode, Encode, MaxEncodedLen};
+
+pub mod traits;
+use traits::*;
 
 pub type Power = u64;
 
@@ -55,13 +58,13 @@ impl<AccountId, OutputId: Ord + Clone, MaxVoters> Votes<AccountId, OutputId, Max
 	pub fn tally_votes<T: Config>(&self) -> Result<Summary<OutputId>, Error<T>> {
 		let mut best_data = None;
 		let mut best_power = 0;
-
 		let mut second_best_power = 0;
-		for (data, vote) in self.iter() {
+
+		for (id, vote) in self.iter() {
 			if vote.total_voting_power > best_power {
 				second_best_power = best_power;
 				best_power = vote.total_voting_power;
-				best_data = Some(data);
+				best_data = Some(id);
 			} else if vote.total_voting_power > second_best_power {
 				second_best_power = vote.total_voting_power;
 			}
@@ -71,10 +74,66 @@ impl<AccountId, OutputId: Ord + Clone, MaxVoters> Votes<AccountId, OutputId, Max
 		let summary = Summary {
 			vote_total: self.vote_total,
 			winning_vote_total: best_power,
-			winning_data: (*best_data).clone(),
+			winning_data: best_data.clone(),
 			runner_up_total: second_best_power,
 		};
 
 		Ok(summary)
+	}
+}
+
+impl<T: Config> Pallet<T> {
+	pub fn submit_vote(
+		task: T::TaskId,
+		output: T::OutputId,
+		voter: T::AccountId,
+	) -> Result<(), Error<T>> {
+		let mut round = Rounds::<T>::get(&task).ok_or(Error::UnknownTask)?;
+
+		let power = T::VotingProvider::voting_power_of(&task, &voter)?;
+
+		if let Some(vote) = round.votes.get_mut(&output) {
+			vote.add_voter(voter, power)?;
+		} else {
+			let mut vote = Data::new();
+			vote.add_voter(voter, power)?;
+			round.votes.try_insert(output, vote).map_err(|_| Error::TooManyVoters)?;
+		}
+
+		Rounds::<T>::insert(task, round);
+		Ok(())
+	}
+
+	pub fn try_conclude_voting(task_id: T::TaskId) -> Result<(), Error<T>> {
+		let round = Rounds::<T>::get(&task_id).ok_or(Error::UnknownTask)?;
+
+		if T::VotingProvider::meets_quorum(&task_id, &round) {
+			let summary = round.tally_votes()?;
+			T::OnVoteConclusion::voting_concluded(&task_id, summary, &round);
+			Rounds::<T>::remove(&task_id);
+		}
+
+		Ok(())
+	}
+
+	pub fn start_task_voting(
+		task_id: T::TaskId,
+		initial_vote: Option<(T::AccountId, T::OutputId)>,
+	) -> Result<(), Error<T>> {
+		ensure!(!Rounds::<T>::contains_key(&task_id), Error::VoteInProgress);
+		let mut votes = BoundedBTreeMap::new();
+		let vote_total = if let Some((voter, data)) = initial_vote {
+			let power = T::VotingProvider::voting_power_of(&task_id, &voter)?;
+			let mut vote = Data::new();
+			vote.add_voter(voter, power)?;
+			votes.try_insert(data, vote).map_err(|_| Error::TooManyVoters)?;
+			power
+		} else {
+			0
+		};
+
+		let votes = Votes { votes, vote_total };
+		Rounds::<T>::insert(task_id, votes);
+		Ok(())
 	}
 }

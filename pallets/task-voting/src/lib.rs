@@ -1,7 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::marker::PhantomData;
-use frame_support::BoundedBTreeMap;
 pub use pallet::*;
 use parity_scale_codec::MaxEncodedLen;
 #[cfg(test)]
@@ -11,8 +10,9 @@ mod mock;
 mod tests;
 
 mod benchmarking;
-mod votes;
-use votes::{Data as VotingData, Power as VotingPower, Summary as VoteResultSummary, Votes};
+mod voting;
+use voting::traits::{OnVoteConclusion, QuorumMet, VoterPower};
+use voting::{Power as VotingPower, Votes};
 
 #[allow(clippy::unnecessary_cast)]
 pub mod weights;
@@ -22,22 +22,6 @@ pub type RoundOf<T> = Votes<
 	<T as Config>::OutputId,
 	<T as Config>::MaxVoters,
 >;
-
-pub trait QuorumMet<T: Config> {
-	fn meets_quorum(task: &T::TaskId, votes: &RoundOf<T>) -> bool;
-}
-
-pub trait OnVoteConclusion<T: Config> {
-	fn voting_concluded(
-		task: &T::TaskId,
-		summary: VoteResultSummary<T::OutputId>,
-		votes: &RoundOf<T>,
-	);
-}
-
-pub trait VoterPower<T: Config> {
-	fn voting_power_of(task: &T::TaskId, voter: &T::AccountId) -> Result<VotingPower, Error<T>>;
-}
 
 pub struct VotingProviderStrategy<P, Q>(PhantomData<(P, Q)>);
 
@@ -118,63 +102,4 @@ pub mod pallet {
 
 	#[pallet::storage]
 	pub type Rounds<T: Config> = StorageMap<_, Identity, T::TaskId, RoundOf<T>>;
-
-	impl<T: Config> Pallet<T> {
-		pub fn submit_vote(
-			task: T::TaskId,
-			output: T::OutputId,
-			voter: T::AccountId,
-		) -> Result<(), Error<T>> {
-			//main round structure
-			let mut round = Rounds::<T>::get(&task).ok_or(Error::UnknownTask)?;
-
-			// stake api
-			let power = T::VotingProvider::voting_power_of(&task, &voter)?;
-
-			// get output hash
-			if let Some(vote) = round.votes.get_mut(&output) {
-				vote.add_voter(voter, power)?;
-			} else {
-				let mut vote = VotingData::new();
-				vote.add_voter(voter, power)?;
-				round.votes.try_insert(output, vote).map_err(|_| Error::TooManyVoters)?;
-			}
-
-			Rounds::<T>::insert(task, round);
-			Ok(())
-		}
-
-		pub fn try_conclude_voting(task_id: T::TaskId) -> Result<(), Error<T>> {
-			let votes = Rounds::<T>::get(&task_id).ok_or(Error::UnknownTask)?;
-
-			if T::VotingProvider::meets_quorum(&task_id, &votes) {
-				let summary = votes.tally_votes()?;
-				T::OnVoteConclusion::voting_concluded(&task_id, summary, &votes);
-				Rounds::<T>::remove(&task_id);
-			}
-
-			Ok(())
-		}
-
-		pub fn start_task_voting(
-			task_id: T::TaskId,
-			initial_vote: Option<(T::AccountId, T::OutputId)>,
-		) -> Result<(), Error<T>> {
-			ensure!(!Rounds::<T>::contains_key(&task_id), Error::VoteInProgress);
-			let mut votes = BoundedBTreeMap::new();
-			let vote_total = if let Some((voter, data)) = initial_vote {
-				let power = T::VotingProvider::voting_power_of(&task_id, &voter)?;
-				let mut vote = VotingData::new();
-				vote.add_voter(voter, power)?;
-				votes.try_insert(data, vote).map_err(|_| Error::TooManyVoters)?;
-				power
-			} else {
-				0
-			};
-
-			let votes = Votes { votes, vote_total };
-			Rounds::<T>::insert(task_id, votes);
-			Ok(())
-		}
-	}
 }

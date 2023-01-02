@@ -16,6 +16,8 @@ use voting::{Power as VotingPower, Votes};
 
 mod sampling;
 
+pub mod staking;
+
 #[allow(clippy::unnecessary_cast)]
 pub mod weights;
 

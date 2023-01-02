@@ -22,6 +22,9 @@ scale-info = { workspace = true }
 sp-consensus-pow = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
+pallet-staking.workspace = true
+sp-staking.workspace = true
+sp-arithmetic.workspace = true
 
 [dev-dependencies]
 pallet-balances = { features = ["std"], workspace = true }
@@ -38,6 +41,7 @@ std = [
     'frame-support/std',
     'frame-system/std',
     'frame-benchmarking/std',
+    'pallet-staking/std',
     'sp-consensus-pow/std',
     'sp-std/std',
 ]
